@@ -60,14 +60,14 @@ public class TSAnimation : MonoBehaviour
         m_animator.SetFloat("Forward", m_movement.ForwardSpeed);
         m_animator.SetFloat("LookHorizontal", m_lookH);
         m_animator.SetFloat("LookVertical", m_lookV);
-        m_animator.SetBool("MidAir" , !GetComponent<CharacterController>().isGrounded);
+        //m_animator.SetBool("MidAir" , !GetComponent<CharacterController>().isGrounded);
 
         // audio
         float runFactor = Mathf.Max(m_movement.ForwardSpeed - m_movement.walkSpeed, 0) / (m_movement.runSpeed - m_movement.walkSpeed);
-        bool grounded = GetComponent<CharacterController>().isGrounded;
+        //bool grounded = GetComponent<CharacterController>().isGrounded;
 
-        m_soundTrot.volume = grounded ? (Mathf.Min(m_movement.ForwardSpeed / m_movement.walkSpeed, 1) - runFactor) * walkVolume : 0;
-        m_soundGallop.volume = grounded ? runFactor * runVolume : 0;
+        //m_soundTrot.volume = grounded ? (Mathf.Min(m_movement.ForwardSpeed / m_movement.walkSpeed, 1) - runFactor) * walkVolume : 0;
+        //m_soundGallop.volume = grounded ? runFactor * runVolume : 0;
 
         // stop sounds with no volume
         if (m_soundTrot.volume < 0.001f) {

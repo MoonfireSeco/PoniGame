@@ -9,6 +9,8 @@ public class TSMovement : MonoBehaviour
 {
     public bool debugView = true;
 
+    public LayerMask walkable;
+
     [Tooltip("How fast the character may walk (Units / Second)")]
     [Range(0.5f, 2.0f)]
     public float walkSpeed = 1.0f;
@@ -50,8 +52,7 @@ public class TSMovement : MonoBehaviour
     public float airAlignSpeed = 1.5f;
 
 
-    private CollisionFlags m_CollisionFlags;
-    private CharacterController m_controller;
+    private CapsuleCollider m_collider;
     private float m_forwardVelocity = 0;
     private float m_angVelocity = 0;
     private float m_velocityY = 0;
@@ -66,13 +67,23 @@ public class TSMovement : MonoBehaviour
 
     void Start ()
     {
-        m_controller = GetComponent<CharacterController>();
+        m_collider = GetComponent<CapsuleCollider>();
     }
-	
+
+
+    /*
+     * Is there a collider beneath us?
+     */
+    public bool IsGrounded()
+    {
+        RaycastHit hitInfo;
+        return Physics.SphereCast(transform.TransformPoint(m_collider.center - Vector3.up * (m_collider.height / 2 - m_collider.radius)), m_collider.radius * 0.95f, -transform.up, out hitInfo, 0.01f, walkable);
+    }
+
     /*
      * Executes the player's or AI's commands
      */
-	void Update ()
+    void FixedUpdate ()
     {
         MoveInputs inputs = new MoveInputs();
         InputDevice device = InputManager.ActiveDevice;
@@ -128,12 +139,12 @@ public class TSMovement : MonoBehaviour
             inputs.run = false;
             inputs.jump = false;
         }
-
+        
         // linearly accelerate towards some target velocity
         m_forwardVelocity = Mathf.MoveTowards(m_forwardVelocity, inputs.forward * (inputs.run ? runSpeed : walkSpeed), acceleration * Time.deltaTime);
         Vector3 moveVelocity = transform.forward * m_forwardVelocity;
-
-        if (m_controller.isGrounded)
+        
+        if (IsGrounded())
         {
             // align the character to the ground being stood on
             Vector3 normal = GetGroundNormal(normalSamples, groundSmoothRadius);
@@ -143,13 +154,13 @@ public class TSMovement : MonoBehaviour
             if (inputs.jump)
             {
                 // jumping
-                m_velocityY = jumpSpeed;
+                GetComponent<Rigidbody>().velocity = new Vector3(GetComponent<Rigidbody>().velocity.x, jumpSpeed, GetComponent<Rigidbody>().velocity.z);
             }
             else
             {
                 // keeps the character on the ground by applying a small downwards velocity that increases with the slope the character is standing on
                 float slopeFactor = (1 - Mathf.Clamp01(Vector3.Dot(normal, Vector3.up)));
-                m_velocityY = (-0.5f * slopeFactor + (1 - slopeFactor) * -0.01f) / Time.deltaTime;
+                //m_velocityY = (-0.5f * slopeFactor + (1 - slopeFactor) * -0.01f) / Time.deltaTime;
             }
         }
         else
@@ -160,46 +171,18 @@ public class TSMovement : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, Time.deltaTime * airAlignSpeed);
 
             // apply downwards acceleration when the character is in the air
-            m_velocityY += Physics.gravity.y * Time.deltaTime * gravityFraction;
+            //m_velocityY += Physics.gravity.y * Time.deltaTime * gravityFraction;
         }
-        
-        Vector3 move = new Vector3(moveVelocity.x, m_velocityY, moveVelocity.z) * Time.deltaTime;
-        m_CollisionFlags = m_controller.Move(move);
+
+        Vector3 move = new Vector3(moveVelocity.x, GetComponent<Rigidbody>().velocity.y, moveVelocity.z);// * Time.deltaTime;
+        GetComponent<Rigidbody>().velocity = move;
+        //m_CollisionFlags = m_controller.Move(move);
 
         float targetAngVelocity = Mathf.Clamp(inputs.turn, -rotSpeed * Time.deltaTime, rotSpeed * Time.deltaTime);
         m_angVelocity = Mathf.MoveTowards(m_angVelocity, targetAngVelocity, 20.0f * Time.deltaTime) * Mathf.Clamp01((Mathf.Abs(inputs.turn) + 25.0f) / 45.0f);
         bool willOvershoot = Mathf.Abs(inputs.turn) < Mathf.Abs(m_angVelocity);
         m_angVelocity = willOvershoot ? targetAngVelocity : m_angVelocity;
         transform.Rotate(0, m_angVelocity, 0, Space.Self);
-    }
-
-
-    /*
-     * Moves rigidbodies that are blocking the characters path and are moveable
-     */
-    private void OnControllerColliderHit(ControllerColliderHit hit)
-    {
-        Rigidbody body = hit.collider.attachedRigidbody;
-
-        // dont move the rigidbody if the character is on top of it
-        if (m_CollisionFlags == CollisionFlags.Below)
-        {
-            return;
-        }
-
-        // if we are airborne and hit our head reverse our vertical velocity
-        if ((m_CollisionFlags & CollisionFlags.Above) != 0 && !m_controller.isGrounded)
-        {
-            m_velocityY *= -0.5f;
-        }
-
-        if (body == null || body.isKinematic)
-        {
-            return;
-        }
-
-        Vector3 pushDir = new Vector3(hit.moveDirection.x, 0, hit.moveDirection.y);
-        body.AddForceAtPosition(pushDir * 0.5f, hit.point, ForceMode.Impulse);
     }
 
 
@@ -213,7 +196,7 @@ public class TSMovement : MonoBehaviour
         for (int i = 0; i < samples; i++)
         {
             Vector3 offset = Quaternion.Euler(0, i * (360.0f / samples), 0) * Vector3.forward * radius;
-            Vector3 SamplePos = transform.TransformPoint(offset + m_controller.center);
+            Vector3 SamplePos = transform.TransformPoint(offset + m_collider.center);
             Vector3 SampleDir = transform.TransformPoint(offset + Vector3.down * 0.05f);
            
             RaycastHit hit;
@@ -258,6 +241,7 @@ public class TSMovement : MonoBehaviour
 
             if (m_pullingCart)
             {
+                transform.rotation = Quaternion.LookRotation(Vector3.ProjectOnPlane(transform.position - GameController.m_harness.position, Vector3.up), transform.up);
                 cart.Harness(transform);
             }
         }
